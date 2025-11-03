@@ -268,6 +268,47 @@ type ChatCompletionRequest struct {
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 	// Metadata to store with the completion.
 	Metadata map[string]string `json:"metadata,omitempty"`
+	// ExtraBody allows you to pass additional fields that are not explicitly defined in the struct.
+	// This is useful for vendor-specific extensions like Alibaba's Bailian platform which requires
+	// enable_search=true to enable web search functionality.
+	// The fields in ExtraBody will be flattened into the top level of the request body.
+	ExtraBody map[string]any `json:"-"`
+}
+
+func (r ChatCompletionRequest) MarshalJSON() ([]byte, error) {
+	// Create an alias type to avoid infinite recursion
+	type Alias ChatCompletionRequest
+
+	// Marshal the struct normally (ExtraBody is ignored due to json:"-")
+	aux := struct {
+		Alias
+	}{
+		Alias: (Alias)(r),
+	}
+
+	b, err := json.Marshal(aux)
+	if err != nil {
+		return nil, err
+	}
+
+	// If there's no ExtraBody, return as is
+	if len(r.ExtraBody) == 0 {
+		return b, nil
+	}
+
+	// Unmarshal into a map to merge ExtraBody fields
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+
+	// Merge ExtraBody fields into the top level
+	for k, v := range r.ExtraBody {
+		m[k] = v
+	}
+
+	// Marshal the merged map
+	return json.Marshal(m)
 }
 
 type StreamOptions struct {
